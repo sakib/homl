@@ -4,6 +4,7 @@ from homl import app, db
 class UserDB(db.Model):
     __tablename__ = 'users'
     number = db.Column(db.String(40), primary_key=True, nullable=False, autoincrement=False)
+    username = db.Column(db.String(15), nullable=True)
     age = db.Column(db.Integer, nullable=False)
     gender = db.Column(db.String(1), nullable=False)
     bio = db.Column(db.String(100), nullable=False)

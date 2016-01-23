@@ -9,7 +9,7 @@ import itertools
 
 @app.route('/')
 def index():
-    return jsonify({'Fuck you': 'Fuck you'})
+    return jsonify({'PSA': 'I love League of Legends!!!'})
 
 
 @app.route('/users', methods=['GET','POST'])
@@ -20,6 +20,7 @@ def users():
         return jsonify(users=json_users)
     if request.method == 'POST':
         number = request.json.get('number')
+        username = request.json.get('username')
         age = request.json.get('age')
         gender = request.json.get('gender')
         bio = request.json.get('bio')
@@ -30,15 +31,16 @@ def users():
         if user is None: # Create new user
             if age is None: return jsonify({'error': 'Age is missing'});
             if gender is None: return jsonify({'error': 'Gender is missing'});
-            if gender not in ['M', 'F']: return jsonify({'error': 'M/F?'});
+            if gender not in ['M', 'F', 'O']: return jsonify({'error': 'M/F/O?'});
             if bio is None: return jsonify({'error': 'Bio is missing'});
-            user = UserDB(number=number, gender=gender,
-                          age=age, bio=bio, story=story)
+            user = UserDB(number=number, gender=gender, age=age,
+                          username=username, bio=bio, story=story)
             db.session.add(user)
             db.session.commit()
             return jsonify({'message': 'Success'})
         else: # Update user info
             if age is not None: user.age = age;
+            if username is not None: user.username = username;
             if gender is not None: user.gender = gender;
             if bio is not None: user.bio = bio;
             if story is not None: user.story = story;
@@ -64,7 +66,9 @@ def match(number):
         matches = StoryMatchDB.query.filter((StoryMatchDB.user1_id==number) | (StoryMatchDB.user2_id==number)).all()
         if not matches:
             return jsonify({'error': 'User does not exist'})
-        json_matches = map(get_match_json, matches)
+        json_matches = []
+        for match in matches:
+            json_matches.append(get_specific_match_json(match, number))
         return jsonify(matches=json_matches)
     return jsonify({'error': 'Bad request'})
 
@@ -103,7 +107,7 @@ def locations():
                 avg_lat = (lat+location.lat)/2
                 avg_long = (long+location.long)/2
                 match = StoryMatchDB(user1_id=user_id, user2_id=location.user_id,
-                                     lat=avg_lat, long=avg_long, day=time.date())
+                        lat=avg_lat, long=avg_long, day=time.date())
                 if match.user1_id != match.user2_id:
                     print match.user1_id, match.user2_id
                     matches = StoryMatchDB.query.filter(
@@ -125,10 +129,24 @@ def locations():
 
 def get_user_json(user):
     return {'number': user.number,
+            'username': user.username,
             'age': user.age,
             'gender': user.gender,
             'bio': user.bio,
             'story': user.story }
+
+
+def get_specific_match_json(match, user_id):
+    if match.user1_id == user_id:
+        user = UserDB.query.filter_by(number=match.user2_id).first()
+    elif match.user2_id == user_id:
+        user = UserDB.query.filter_by(number=match.user1_id).first()
+    user_json = get_user_json(user)
+    return {'id': match.id,
+            'match': user_json,
+            'day': str(match.day),
+            'lat': match.lat,
+            'long': match.long }
 
 
 def get_match_json(match):
