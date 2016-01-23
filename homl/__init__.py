@@ -17,4 +17,4 @@ manager.add_command('db', MigrateCommand)
 
 auth = HTTPBasicAuth()
 
-from pay import views, models
+from homl import views, models

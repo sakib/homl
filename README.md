@@ -1,4 +1,4 @@
-PayPark tech asset repository. Flask App in development.
+HOML tech asset repository. Flask App in development.
 
 To get set up on the project:
 
@@ -19,14 +19,14 @@ Fedora: yum install python-migrate
 
 Run the following commands:
 - "sudo mysql"
-- "create database pay;"
-- "create user 'pay'@'localhost' identified by 'pay';"
-- "grant all privileges on pay.* to 'pay'@'localhost';"
+- "create database homl;"
+- "create user 'homl'@'localhost' identified by 'homl';"
+- "grant all privileges on homl.* to 'homl'@'localhost';"
 - "flush privileges;"
 Quit out of mysql with "quit". Then run:
 - "./migrate.py db migrate"
 - "./migrate.py db upgrade"
 
-To check the database subsequently, run "mysql -uice -pice"
-To change database structure, edit ice/models.py, then run migrate and upgrade again.
+To check the database subsequently, run "mysql -uhoml -phoml"
+To change database structure, edit homl/models.py, then run migrate and upgrade again.
 If you happen to remove the migrations folder, then run init, migrate, then upgrade.

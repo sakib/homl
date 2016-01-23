@@ -1,6 +1,6 @@
 #!venv/bin/python
 
-from pay import manager
+from homl import manager
 
 if __name__ == '__main__':
     manager.run()
