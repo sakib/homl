@@ -2,7 +2,7 @@
 from flask import request, jsonify, url_for, render_template
 from homl import app, db, auth
 from models import *
-from datetime import datetime
+from datetime import datetime, timedelta
 from math import radians, cos, sin, asin, sqrt
 import itertools
 
@@ -24,7 +24,6 @@ def users():
         gender = request.json.get('gender')
         bio = request.json.get('bio')
         story = request.json.get('story')
-        print number, age, gender, bio, story
         if number is None:
             return jsonify({'message': 'Number is missing'})
         user = UserDB.query.filter_by(number=number).first()
@@ -62,9 +61,7 @@ def matches():
 @app.route('/match/<number>', methods=['GET'])
 def match(number):
     if request.method == 'GET':
-        matches = StoryMatchDB.query.filter_by(user1_id=number).all()
-        matches.append(StoryMatchDB.query.filter_by(user2_id=number).all())
-        matches = [val for sublist in matches for val in sublist]
+        matches = StoryMatchDB.query.filter((StoryMatchDB.user1_id==number) | (StoryMatchDB.user2_id==number)).all()
         if not matches:
             return jsonify({'error': 'User does not exist'})
         json_matches = map(get_match_json, matches)
@@ -81,8 +78,8 @@ def locations():
         return jsonify(locations=json_locations)
     if request.method == 'POST':
         user_id = request.json.get('user_id')
-        lat = request.json.get('lat')
-        long = request.json.get('long')
+        lat = float(request.json.get('lat'))
+        long = float(request.json.get('long'))
         time = datetime.now()
 
         # Add location to storage
@@ -91,17 +88,33 @@ def locations():
         db.session.commit()
 
         # Check all stored locations for matches. Post to story match when loc/time match
-        ten_min_ago = time - datetime.timedelta(minutes=10)
-        locations_ten_min_ago = LocationStorageDB.query.filter_by(time > ten_min_ago).all()
+        ten_min_ago = time - timedelta(minutes=10)
+        #locations_ten_min_ago = LocationStorageDB.query.filter_by(time >= ten_min_ago).all()
+        locations = LocationStorageDB.query.all()
+        locations_ten_min_ago = []
+        for location in locations:
+            if location.time > ten_min_ago:
+                locations_ten_min_ago.append(location)
+
         for location in locations_ten_min_ago:
             distance = haversine(lat, long, location.lat, location.long)
             if distance < 1: # 1 kilometer radius
                 # Post to story match db
                 avg_lat = (lat+location.lat)/2
                 avg_long = (long+location.long)/2
-                match = StoryMatchDB(user_id=user1_id, user2_id=location.user_id,
+                match = StoryMatchDB(user1_id=user_id, user2_id=location.user_id,
                                      lat=avg_lat, long=avg_long, day=time.date())
-                db.session.add(match)
+                if match.user1_id != match.user2_id:
+                    print match.user1_id, match.user2_id
+                    matches = StoryMatchDB.query.filter(
+                        (StoryMatchDB.user1_id==match.user1_id \
+                            and StoryMatchDB.user2_id==match.user2_id \
+                            and day > time.date() - timedelta(days=1)) | \
+                        (StoryMatchDB.user2_id==match.user1_id \
+                            and StoryMatchDB.user1_id==match.user2_id \
+                            and day > time.date() - timedelta(days=1))).all()
+                    if not matches:
+                        db.session.add(match)
 
         # Save and return
         db.session.commit()
@@ -122,7 +135,7 @@ def get_match_json(match):
     return {'id': match.id,
             'user1_id': match.user1_id,
             'user2_id': match.user2_id,
-            'day': match.day,
+            'day': str(match.day),
             'lat': match.lat,
             'long': match.long }
 
@@ -132,7 +145,7 @@ def get_location_json(location):
             'user_id': location.user_id,
             'lat': location.lat,
             'long': location.long,
-            'time': location.time }
+            'time': str(location.time) }
 
 
 # Calculate the great circle distance b/w two lat long points
@@ -140,7 +153,7 @@ def haversine(lat1, long1, lat2, long2):
     lat1, long1, lat2, long2 = map(radians, [lat1, long1, lat2, long2])
     dlong = long2 - long1
     dlat = lat2 - lat1
-    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlong/2)**2
     c = 2 * asin(sqrt(a))
     km = 6367 * c
     return km
