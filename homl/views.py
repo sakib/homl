@@ -5,6 +5,8 @@ from models import *
 from datetime import datetime, timedelta
 from math import radians, cos, sin, asin, sqrt
 import itertools
+import urllib
+import json
 
 
 @app.route('/')
@@ -50,22 +52,64 @@ def users():
 
 
 # Dump story matches
-@app.route('/match', methods=['GET'])
-def matches():
+@app.route('/crime', methods=['GET'])
+def crime():
     if request.method == 'GET':
-        matches = StoryMatchDB.query.all()
-        json_matches = map(get_match_json, matches)
-        return jsonify(matches=json_matches)
+        #matches = StoryMatchDB.query.all()
+        #json_matches = map(get_match_json, matches)
+        #return jsonify(matches=json_matches)
+
+        # Return # of crimes in a 1km radius
+        crime = {}
+        url = 'https://www.opendataphilly.org/api/action/datastore_search?resource_id=3e00a40d-8444-418c-b3a6-bef5524b90a2&limit=1000'
+        f = urllib.urlopen(url)
+        results = json.loads(f.read())
+        results = results["result"]["records"]
+
+        lat = -75.20
+        long = 39.95
+
+        for x in results:
+            lat2 = x["POINT_X"]
+            long2 = x["POINT_Y"]
+            if lat2 is None or long2 is None:
+                continue # idiots
+            lat2 = float(lat2)
+            long2 = float(long2)
+            distance = haversine(lat, long, lat2, long2)
+            if distance > 10:
+                continue
+            if x["TEXT_GENERAL_CODE"] in crime.keys():
+                crime[x["TEXT_GENERAL_CODE"]] += 1
+            else:
+                crime[x["TEXT_GENERAL_CODE"]] = 1
+
+        crime = dict(sorted(crime.items(), key=lambda x:x[1], reverse=True))
+
+        return jsonify(results=crime)
+
     return jsonify({'error': 'Bad request'})
 
 
-# Dump story matches for a particular person
+# Dump story matches for a particular person.
+# Optional argument date in month-day-year gives all matches for a given day.
+# Optional argument dates (any value) gives all possible dates to scroll through
 @app.route('/match/<number>', methods=['GET'])
 def match(number):
     if request.method == 'GET':
-        matches = StoryMatchDB.query.filter((StoryMatchDB.user1_id==number) | (StoryMatchDB.user2_id==number)).all()
+        date = request.args.get("date")
+        dates = request.args.get("dates")
+        if dates is not None:
+            dates = db.session.execute('SELECT DISTINCT day FROM story_match WHERE user2_id=\''+number+'\' OR user1_id=\''+number+'\'')
+            dates_json = map(get_date_json, dates)
+            return jsonify(dates=dates_json)
+        if date is not None:
+            date = datetime.strptime(date, '%m-%d-%Y').date()
+            matches = StoryMatchDB.query.filter(((StoryMatchDB.user1_id==number) | (StoryMatchDB.user2_id==number)) & (StoryMatchDB.day==date)).order_by(StoryMatchDB.day).all()
+        else:
+            matches = StoryMatchDB.query.filter((StoryMatchDB.user1_id==number) | (StoryMatchDB.user2_id==number)).order_by(StoryMatchDB.day).all()
         if not matches:
-            return jsonify({'error': 'User does not exist'})
+            return jsonify({'error': 'No matches exist'})
         json_matches = []
         for match in matches:
             json_matches.append(get_specific_match_json(match, number))
@@ -93,7 +137,6 @@ def locations():
 
         # Check all stored locations for matches. Post to story match when loc/time match
         ten_min_ago = time - timedelta(minutes=10)
-        #locations_ten_min_ago = LocationStorageDB.query.filter_by(time >= ten_min_ago).all()
         locations = LocationStorageDB.query.all()
         locations_ten_min_ago = []
         for location in locations:
@@ -109,20 +152,43 @@ def locations():
                 match = StoryMatchDB(user1_id=user_id, user2_id=location.user_id,
                         lat=avg_lat, long=avg_long, day=time.date())
                 if match.user1_id != match.user2_id:
-                    print match.user1_id, match.user2_id
-                    matches = StoryMatchDB.query.filter(
-                        (StoryMatchDB.user1_id==match.user1_id \
-                            and StoryMatchDB.user2_id==match.user2_id \
-                            and day > time.date() - timedelta(days=1)) | \
-                        (StoryMatchDB.user2_id==match.user1_id \
-                            and StoryMatchDB.user1_id==match.user2_id \
-                            and day > time.date() - timedelta(days=1))).all()
-                    if not matches:
+                    matches = db.session.query(StoryMatchDB).filter(
+                            StoryMatchDB.user1_id==match.user1_id, \
+                            StoryMatchDB.user2_id==match.user2_id, \
+                            StoryMatchDB.day>time.date()-timedelta(days=1))
+                    matches2 = db.session.query(StoryMatchDB).filter(
+                            StoryMatchDB.user2_id==match.user1_id, \
+                            StoryMatchDB.user1_id==match.user2_id, \
+                            StoryMatchDB.day>time.date()-timedelta(days=1))
+                    if matches.first() is None and matches2.first() is None:
                         db.session.add(match)
 
         # Save and return
         db.session.commit()
-        return jsonify({'message': 'Success'})
+
+        # Return # of crimes in a 1km radius
+        crime = {}
+        url = 'https://www.opendataphilly.org/api/action/datastore_search?resource_id=3e00a40d-8444-418c-b3a6-bef5524b90a2&limit=1000'
+        f = urllib.urlopen(url)
+        results = json.loads(f.read())
+        results = results["result"]["records"]
+
+        for x in results:
+            lat2 = x["POINT_X"]
+            long2 = x["POINT_Y"]
+            if lat2 is None or long2 is None:
+                continue # idiots
+            distance = haversine(lat, long, float(lat2), float(long2))
+            if distance > 10:
+                continue
+            if x["TEXT_GENERAL_CODE"] in crime.keys():
+                crime[x["TEXT_GENERAL_CODE"]] += 1
+            else:
+                crime[x["TEXT_GENERAL_CODE"]] = 1
+
+        crime = dict(sorted(crime.items(), key=lambda x:x[1], reverse=True))
+
+        return jsonify(results=crime)
 
     return jsonify({'error': 'Bad request'})
 
@@ -144,7 +210,7 @@ def get_specific_match_json(match, user_id):
     user_json = get_user_json(user)
     return {'id': match.id,
             'match': user_json,
-            'day': str(match.day),
+            'day': datetime.strftime(match.day, "%m-%d-%Y"),
             'lat': match.lat,
             'long': match.long }
 
@@ -153,7 +219,7 @@ def get_match_json(match):
     return {'id': match.id,
             'user1_id': match.user1_id,
             'user2_id': match.user2_id,
-            'day': str(match.day),
+            'day': datetime.strftime(match.day, "%m-%d-%Y"),
             'lat': match.lat,
             'long': match.long }
 
@@ -164,6 +230,11 @@ def get_location_json(location):
             'lat': location.lat,
             'long': location.long,
             'time': str(location.time) }
+
+
+def get_date_json(date):
+    date = str(date)[15:26]
+    return {'date': datetime.strptime(date, "%Y, %m, %d").strftime("%m-%d-%Y") }
 
 
 # Calculate the great circle distance b/w two lat long points
