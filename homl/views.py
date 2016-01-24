@@ -77,6 +77,7 @@ def crime():
             lat2 = float(lat2)
             long2 = float(long2)
             distance = haversine(lat, long, lat2, long2)
+            print distance
             if distance > 10:
                 continue
             if x["TEXT_GENERAL_CODE"] in crime.keys():
@@ -84,7 +85,7 @@ def crime():
             else:
                 crime[x["TEXT_GENERAL_CODE"]] = 1
 
-        crime = dict(sorted(crime.items(), key=lambda x:x[1], reverse=True))
+        crime = sorted(crime.items(), key=lambda x:x[1], reverse=True)
 
         return jsonify(results=crime)
 
@@ -174,21 +175,20 @@ def locations():
         results = results["result"]["records"]
 
         for x in results:
-            lat2 = x["POINT_X"]
-            long2 = x["POINT_Y"]
+            lat2 = x["POINT_Y"]
+            long2 = x["POINT_X"]
             if lat2 is None or long2 is None:
                 continue # idiots
             distance = haversine(lat, long, float(lat2), float(long2))
-            if distance > 10:
+            #print distance
+            if distance > 1:
                 continue
             if x["TEXT_GENERAL_CODE"] in crime.keys():
                 crime[x["TEXT_GENERAL_CODE"]] += 1
             else:
                 crime[x["TEXT_GENERAL_CODE"]] = 1
 
-        crime = dict(sorted(crime.items(), key=lambda x:x[1], reverse=True))
-
-        return jsonify(results=crime)
+        return jsonify(results=crime, sum=sum(crime.itervalues()))
 
     return jsonify({'error': 'Bad request'})
 
