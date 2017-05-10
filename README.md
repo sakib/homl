@@ -1,4 +1,4 @@
-HOML tech asset repository. Flask App in development.
+HOML backend tech assets exposing data on endpoints for a seperate iOSFlask App in development. app, which is designed to connect you with the many strangers who you've crossed paths with over the day.
 
 To get set up on the project:
 
